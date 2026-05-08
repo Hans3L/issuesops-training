@@ -1,0 +1,12 @@
+name: Deploy a Nginx
+description: Solicita un despliegue
+title: "Deploy: "
+labels: ["deploy"]
+body:
+    - type: dropdown
+      id: ambiente
+      attributes:
+        label: Ambiente
+        options: [staging, prod]
+      validations:
+        required: true

@@ -1,0 +1,56 @@
+name: Deploy Nginx desde Issue
+#on: es el trigger de issues
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  deploy:
+    # solo corre si el comentario empieza con.deploy y el issue tiene label deploy
+    if: |
+      startsWith(github.event.comment.body, '.deploy') &&
+      contains(github.event.issue.labels.*.name, 'deploy')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parsear ambiente
+        id: vars
+        run: |
+          CMD="${{ github.event.comment.body }}"
+          ENV=$(echo "$CMD" | awk '{print $2}')
+          if [ -z "$ENV" ]; then ENV="staging"; fi
+          echo "env=$ENV" >> $GITHUB_OUTPUT
+
+      - name: Subir index.html a /tmp
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "public/index.html"
+          target: "/tmp/"
+
+      - name: Publicar en nginx y recargar
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            sudo mkdir -p /var/www/html
+            sudo mv /tmp/public/index.html /var/www/html/index.html
+            sudo chmod 644 /var/www/html/index.html
+            sudo systemctl reload nginx
+
+      - name: Comentar resultado
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --body "✅ Deploy a **${{ steps.vars.outputs.env }}** completado. http://${{ secrets.SSH_HOST }}"
